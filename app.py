@@ -1,3 +1,4 @@
+from logging import error, info
 from flask import Flask, render_template,flash,redirect,url_for,session,logging,request
 from data import Articles
 import sqlite3
@@ -67,16 +68,46 @@ def register():
             db = get_db()
             cur = db.cursor()
             cur.execute( "INSERT INTO users(name , email,username,password) VALUES (?,?,?,?)",(name, email,username,password) )
-            
+
             db.commit()
             flash("Registered succes , you can now logging", "success")
         except:
             db.rollback()
             flash("error in insertion operation", "error")
         finally:
-            db.close()
+            close_connection()
             redirect(url_for("loggin"))
     return render_template("register.html", form = form)
+
+# user login
+@app.route("/login", methods =["GET", "POST"])
+def loggin():
+    error = ""
+    if request.method == "POST":
+        # Get form field 
+        username = request.form["username"]
+        password_candidate = request.form["password"]
+
+        # create a cursor
+        db = get_db()
+        db.row_factory = sqlite3.Row
+        cur = db.cursor()
+        # get user by username
+        cur.execute("""SELECT * FROM users WHERE username = ?""",[username])
+        data = cur.fetchone()
+        if(data):
+            #Get stored hash
+            password = data["password"]
+
+            #Compare the password
+            if sha256_crypt.verify(password_candidate,password):
+                app.logger,info("PASSWORD MATCHED")
+            else:
+                error = "Invalid Password"
+        else:
+            error = "Username not found"
+            render_template("login.html", error = error)
+    return render_template("login.html", error = error)
 
 if __name__ == "__main__":
     app.secret_key = "1234"
