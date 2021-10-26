@@ -1,10 +1,12 @@
 from logging import error, info
+from os import SEEK_CUR
 from flask import Flask, render_template,flash,redirect,url_for,session,logging,request
 from data import Articles
 import sqlite3
 from flask import g
 from wtforms import Form , StringField, TextAreaField, PasswordField , validators
 from passlib.hash import sha256_crypt
+from functools import wraps
 
 app = Flask(__name__)
 
@@ -70,18 +72,18 @@ def register():
             cur.execute( "INSERT INTO users(name , email,username,password) VALUES (?,?,?,?)",(name, email,username,password) )
 
             db.commit()
-            flash("Registered succes , you can now logging", "success")
+            flash("Registered succes , you can now loging", "success")
         except:
             db.rollback()
             flash("error in insertion operation", "error")
         finally:
             close_connection()
-            redirect(url_for("loggin"))
+            redirect(url_for("login"))
     return render_template("register.html", form = form)
 
 # user login
 @app.route("/login", methods =["GET", "POST"])
-def loggin():
+def login():
     error = ""
     if request.method == "POST":
         # Get form field 
@@ -98,16 +100,45 @@ def loggin():
         if(data):
             #Get stored hash
             password = data["password"]
-
             #Compare the password
             if sha256_crypt.verify(password_candidate,password):
-                app.logger,info("PASSWORD MATCHED")
+                # app.logger,info("PASSWORD MATCHED")
+                session["logged_in"] = True
+                session["username"] = username
+                #flash("Your are logged in ", "success")
+                return redirect(url_for("dashbord"))
             else:
-                error = "Invalid Password"
+                error = "Invalid Login"
+                return render_template("login.html", error = error)
+            # close connection
+            cur.close()
         else:
             error = "Username not found"
             render_template("login.html", error = error)
     return render_template("login.html", error = error)
+
+# https://flask.palletsprojects.com/en/2.0.x/patterns/viewdecorators/
+def login_required(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if "logged_in" in session:
+            return f(*args, **kwargs)
+        else:
+            flash("Unauthorized , Please login","danger")
+        return  redirect(url_for("login"))
+    return wrap
+
+
+@app.route("/dashbord")
+@login_required
+def dashbord():
+    return render_template("dashbord.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("Your are now logged out", "success")
+    return redirect(url_for("login"))
 
 if __name__ == "__main__":
     app.secret_key = "1234"
